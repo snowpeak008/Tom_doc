@@ -1,0 +1,7 @@
+**/bin/
+**/obj/
+**/_payload-build/
+Tom/portable/
+*.log
+*.tmp
+*.rar

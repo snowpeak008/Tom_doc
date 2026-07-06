@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <AssemblyName>Tom_Setup_0.1.0</AssemblyName>
+    <RootNamespace>Tom.Installer</RootNamespace>
+    <Product>Tom Installer</Product>
+    <Description>Tom 0.1.0 installer</Description>
+    <Authors>Tom</Authors>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Payload\Tom-0.1.0.zip" LogicalName="TomPayloadZip" />
+  </ItemGroup>
+
+</Project>
