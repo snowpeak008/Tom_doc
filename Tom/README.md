@@ -30,8 +30,9 @@ D:\workwork\cehua_doc\Tom\portable
 - 大纲：基于标题样式、章节文本和标题候选生成大纲，并支持跳转。
 - 导入：TXT、Markdown、HTML、RTF、DOCX。
 - 导出：TXT、Markdown、HTML、RTF、DOCX。
-- AI：Codex CLI、Claude CLI、扩写、美化、总结、需求整理、检查、自由指令；自由指令输入框为固定高度并带滚动条。
+- AI：Codex CLI、Claude CLI、自由指令；自由指令输入框为固定高度并带滚动条，执行按钮为主按钮。
 - 选区右键 AI：选中文字后，在选区内右键可直接执行扩写、美化、总结、需求四个快捷功能。
+- AI 加载状态：AI 运行中自由指令按钮会显示加载并暂时禁用，输入框仍可继续编辑；选区右键 AI 动作允许并发执行。
 - AI 文体模板：工程设计说明、玩法文档、需求规格、用户手册、简洁说明。
 - AI 防护：CLI 输出必须解析成固定 JSON，且通过 operation、before 和危险内容校验后才会应用。
 - AI 自动应用：开关位于 AI 页签，默认开启；关闭后会先弹出修改预览。

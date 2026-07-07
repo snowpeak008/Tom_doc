@@ -23,13 +23,14 @@ internal sealed class TomMainForm : Form
     private readonly Button _loadButton = new();
     private readonly Button _chooseProjectButton = new();
     private readonly Button _detectCliButton = new();
+    private readonly Button _customAiButton = new();
     private readonly System.Windows.Forms.Timer _autoSaveTimer = new();
-    private readonly List<Button> _aiButtons = new();
     private readonly TomAiService _aiService = new();
     private readonly List<TomAiRunRecord> _aiHistory = new();
     private readonly List<TomDocumentRecord> _documentRecords = new();
     private readonly List<TomSnapshotRecord> _snapshotRecords = new();
     private readonly List<TomOutlineItem> _outlineItems = new();
+    private int _activeAiTasks;
     private TomWorkspace _workspace;
     private TomDocumentStore _store;
     private string _currentDocumentId = TomDocumentStore.DefaultDocumentId;
@@ -621,7 +622,7 @@ internal sealed class TomMainForm : Form
         var panel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            RowCount = 6,
+            RowCount = 5,
             ColumnCount = 1,
             BackColor = Color.Transparent
         };
@@ -629,8 +630,7 @@ internal sealed class TomMainForm : Form
         panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
         panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
 
         _providerCombo.Dock = DockStyle.Fill;
         _providerCombo.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -694,28 +694,13 @@ internal sealed class TomMainForm : Form
         _instructionBox.PlaceholderText = "自由指令或补充要求";
         panel.Controls.Add(_instructionBox, 0, 3);
 
-        var quickRow = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false
-        };
-        AddAiButton(quickRow, "扩写", TomAiAction.Expand);
-        AddAiButton(quickRow, "美化", TomAiAction.Beautify);
-        AddAiButton(quickRow, "总结", TomAiAction.Summarize);
-        AddAiButton(quickRow, "需求", TomAiAction.Requirements);
-        AddAiButton(quickRow, "检查", TomAiAction.Review);
-        panel.Controls.Add(quickRow, 0, 4);
-
-        var custom = new Button
-        {
-            Text = "执行自由指令",
-            Width = 132,
-            Height = 28
-        };
-        custom.Click += async (_, _) => await RunAiActionAsync(TomAiAction.Custom);
-        _aiButtons.Add(custom);
-        panel.Controls.Add(custom, 0, 5);
+        _customAiButton.Text = "执行自由指令";
+        _customAiButton.Dock = DockStyle.Fill;
+        _customAiButton.Height = 44;
+        _customAiButton.Margin = new Padding(0, 8, 0, 0);
+        _customAiButton.Font = new Font("Microsoft YaHei UI", 10.5F, FontStyle.Bold);
+        _customAiButton.Click += async (_, _) => await RunAiActionAsync(TomAiAction.Custom);
+        panel.Controls.Add(_customAiButton, 0, 4);
 
         return panel;
     }
@@ -731,20 +716,6 @@ internal sealed class TomMainForm : Form
         };
         button.Click += (_, _) => action();
         toolbar.Controls.Add(button);
-    }
-
-    private void AddAiButton(FlowLayoutPanel panel, string text, TomAiAction action)
-    {
-        var button = new Button
-        {
-            Text = text,
-            Width = 58,
-            Height = 28,
-            Margin = new Padding(2)
-        };
-        button.Click += async (_, _) => await RunAiActionAsync(action);
-        _aiButtons.Add(button);
-        panel.Controls.Add(button);
     }
 
     private Control BuildStatusBar()
@@ -931,6 +902,12 @@ internal sealed class TomMainForm : Form
 
     private async Task RunAiActionAsync(TomAiAction action)
     {
+        if (action == TomAiAction.Custom && _activeAiTasks > 0)
+        {
+            SetStatus("AI 正在运行，请等待当前任务完成后再执行自由指令。");
+            return;
+        }
+
         var provider = (_providerCombo.SelectedItem as ProviderItem)?.Id ?? "codex";
         var (targetText, targetStart, targetLength, preferredOperation) = BuildAiTarget(action);
         var instruction = BuildInstruction(action);
@@ -942,7 +919,7 @@ internal sealed class TomMainForm : Form
         }
 
         var request = new TomAiRequest(action, provider, instruction, targetText, _editor.Text, preferredOperation);
-        SetAiButtonsEnabled(false);
+        BeginAiTask();
         SetStatus($"{provider} 正在执行 {ActionLabel(action)}...");
 
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(3));
@@ -971,7 +948,7 @@ internal sealed class TomMainForm : Form
         }
         finally
         {
-            SetAiButtonsEnabled(true);
+            EndAiTask();
         }
     }
 
@@ -1309,10 +1286,25 @@ internal sealed class TomMainForm : Form
         return Math.Max(1, (int)Math.Ceiling(characters / 2.2D));
     }
 
-    private void SetAiButtonsEnabled(bool enabled)
+    private void BeginAiTask()
     {
-        foreach (var button in _aiButtons) button.Enabled = enabled;
-        foreach (ToolStripItem item in _selectionAiMenu.Items) item.Enabled = enabled;
+        _activeAiTasks++;
+        UpdateAiLoadingState();
+    }
+
+    private void EndAiTask()
+    {
+        _activeAiTasks = Math.Max(0, _activeAiTasks - 1);
+        UpdateAiLoadingState();
+    }
+
+    private void UpdateAiLoadingState()
+    {
+        if (_customAiButton.IsDisposed) return;
+
+        var isLoading = _activeAiTasks > 0;
+        _customAiButton.Enabled = !isLoading;
+        _customAiButton.Text = isLoading ? $"AI 加载中（{_activeAiTasks}）" : "执行自由指令";
     }
 
     private static string ActionLabel(TomAiAction action)

@@ -26,8 +26,9 @@ Tom_gre/0.1.0/Tom_Setup_0.1.0.exe
 - 标题、正文、加粗、斜体、下划线、对齐、编号、项目符号。
 - 查找、替换、导入 TXT/Markdown/HTML/RTF/DOCX，导出 TXT/Markdown/HTML/RTF/DOCX。
 - 快照创建和恢复，大纲跳转。
-- Codex CLI 和 Claude CLI 辅助扩写、美化、总结、需求整理、检查和自由指令。
+- Codex CLI 和 Claude CLI 执行自由指令。
 - 选中文字后，在选区内右键可直接执行扩写、美化、总结、需求。
+- AI 运行中自由指令按钮会显示加载并暂时禁用，输入框仍可继续编辑；选区右键 AI 动作允许并发执行。
 - AI 历史支持查看摘要、修改前、修改后和 Diff，也可以一键清理历史。
 
 ## AI 环境
