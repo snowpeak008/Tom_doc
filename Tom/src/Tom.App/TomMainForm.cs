@@ -1,9 +1,14 @@
 using System.Drawing.Drawing2D;
+using System.Text.RegularExpressions;
 
 namespace Tom.App;
 
 internal sealed class TomMainForm : Form
 {
+    private static readonly Regex MarkdownHeadingRegex = new(@"^\s{0,3}(#{1,6})\s+(.+?)(?:\s+#+\s*)?$", RegexOptions.Compiled);
+    private static readonly Regex NumberedHeadingRegex = new(@"^(?<number>\d+(?:\.\d+){0,5})(?:[\.．、）)]\s*|\s+)(?<title>\S.+)$", RegexOptions.Compiled);
+    private static readonly Regex ChineseSectionRegex = new(@"^第[零〇一二三四五六七八九十百千万两\d]+(?<unit>[章节篇卷部])(?<title>[\s　、:：].*)?$", RegexOptions.Compiled);
+    private static readonly Regex ChineseNumberedHeadingRegex = new(@"^[（(]?[零〇一二三四五六七八九十百千万两]+[）)、.．]\s*(?<title>\S.+)$", RegexOptions.Compiled);
     private readonly RichTextBox _editor = new();
     private readonly ListView _environmentList = new();
     private readonly TextBox _workspacePath = new();
@@ -1589,18 +1594,26 @@ internal sealed class TomMainForm : Form
         var originalLength = _editor.SelectionLength;
         try
         {
-            var charIndex = 0;
-            var lines = _editor.Text.Replace("\r\n", "\n").Split('\n');
-            for (var lineIndex = 0; lineIndex < lines.Length; lineIndex++)
+            for (var lineIndex = 0; lineIndex < _editor.Lines.Length; lineIndex++)
             {
-                var line = lines[lineIndex];
-                var trimmed = line.Trim();
-                if (trimmed.Length > 0 && IsOutlineLine(trimmed, charIndex))
-                {
-                    _outlineItems.Add(new TomOutlineItem(charIndex, $"{lineIndex + 1}. {trimmed}"));
-                }
+                var charIndex = _editor.GetFirstCharIndexFromLine(lineIndex);
+                if (charIndex < 0) continue;
 
-                charIndex += line.Length + 1;
+                var line = _editor.Lines[lineIndex];
+                var trimmed = line.Trim();
+                if (trimmed.Length == 0) continue;
+
+                var contentStart = charIndex + line.Length - line.TrimStart().Length;
+                var match = AnalyzeOutlineLine(trimmed, contentStart);
+                if (match is not null)
+                {
+                    _outlineItems.Add(new TomOutlineItem(
+                        contentStart,
+                        lineIndex + 1,
+                        match.Level,
+                        match.Title,
+                        match.Source));
+                }
             }
         }
         finally
@@ -1608,33 +1621,94 @@ internal sealed class TomMainForm : Form
             _editor.Select(Math.Min(originalStart, _editor.TextLength), Math.Min(originalLength, Math.Max(0, _editor.TextLength - originalStart)));
         }
 
+        _outlineItems.Sort((left, right) =>
+        {
+            var byStart = left.Start.CompareTo(right.Start);
+            return byStart != 0 ? byStart : left.Level.CompareTo(right.Level);
+        });
+
         foreach (var item in _outlineItems)
         {
             _outlineList.Items.Add(item);
         }
+
+        SetStatus(_outlineItems.Count == 0 ? "未提取到大纲。" : $"已刷新大纲：{_outlineItems.Count} 项。");
     }
 
-    private bool IsOutlineLine(string trimmed, int charIndex)
+    private TomOutlineMatch? AnalyzeOutlineLine(string trimmed, int charIndex)
     {
-        if (trimmed.StartsWith('#')) return true;
-        if (trimmed.StartsWith("第", StringComparison.Ordinal) && (trimmed.Contains('章') || trimmed.Contains('节'))) return true;
-        if (trimmed.Length <= 32 && (trimmed.EndsWith("：", StringComparison.Ordinal) || trimmed.EndsWith(":", StringComparison.Ordinal))) return true;
+        var markdown = MarkdownHeadingRegex.Match(trimmed);
+        if (markdown.Success)
+        {
+            return new TomOutlineMatch(markdown.Groups[1].Value.Length, markdown.Groups[2].Value.Trim(), "markdown");
+        }
 
+        var section = ChineseSectionRegex.Match(trimmed);
+        if (section.Success)
+        {
+            var unit = section.Groups["unit"].Value;
+            var level = unit == "节" ? 2 : 1;
+            return new TomOutlineMatch(level, trimmed, "chinese-section");
+        }
+
+        var numbered = NumberedHeadingRegex.Match(trimmed);
+        if (numbered.Success && LooksLikeStandaloneHeading(trimmed))
+        {
+            var level = Math.Min(6, numbered.Groups["number"].Value.Count(ch => ch == '.') + 1);
+            return new TomOutlineMatch(level, trimmed, "numbered");
+        }
+
+        var chineseNumbered = ChineseNumberedHeadingRegex.Match(trimmed);
+        if (chineseNumbered.Success && LooksLikeStandaloneHeading(trimmed))
+        {
+            return new TomOutlineMatch(2, trimmed, "chinese-numbered");
+        }
+
+        var styleLevel = DetectStyledHeadingLevel(charIndex);
+        if (styleLevel > 0 && LooksLikeStandaloneHeading(trimmed))
+        {
+            return new TomOutlineMatch(styleLevel, trimmed, "style");
+        }
+
+        return null;
+    }
+
+    private int DetectStyledHeadingLevel(int charIndex)
+    {
         try
         {
-            if (charIndex >= 0 && charIndex < _editor.TextLength)
-            {
-                _editor.Select(charIndex, 1);
-                var font = _editor.SelectionFont;
-                if (font is not null && (font.Bold || font.Size >= 13F)) return true;
-            }
+            if (charIndex < 0 || charIndex >= _editor.TextLength) return 0;
+
+            _editor.Select(charIndex, 1);
+            var font = _editor.SelectionFont;
+            if (font is null) return 0;
+            if (font.Size >= 16F) return 1;
+            if (font.Bold && font.Size >= 13F) return 2;
+            if (font.Size >= 14F) return 2;
+            if (font.Bold) return 3;
         }
         catch
         {
             // Outline detection is best-effort and should never interrupt editing.
         }
 
-        return false;
+        return 0;
+    }
+
+    private static bool LooksLikeStandaloneHeading(string trimmed)
+    {
+        if (trimmed.Length is < 2 or > 80) return false;
+        if (trimmed.Count(char.IsWhiteSpace) > 12) return false;
+        if (trimmed.EndsWith("。", StringComparison.Ordinal) ||
+            trimmed.EndsWith("，", StringComparison.Ordinal) ||
+            trimmed.EndsWith(",", StringComparison.Ordinal) ||
+            trimmed.EndsWith("；", StringComparison.Ordinal) ||
+            trimmed.EndsWith(";", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return true;
     }
 
     private void JumpToSelectedOutline()
@@ -1650,7 +1724,7 @@ internal sealed class TomMainForm : Form
         _editor.Select(Math.Min(item.Start, _editor.TextLength), 0);
         _editor.Focus();
         _editor.ScrollToCaret();
-        SetStatus($"已跳转：{item.Text}");
+        SetStatus($"已跳转：{item.Title}");
     }
 
     private void LoadDocumentIfPresent(bool showMissingMessage = false, bool resetWhenMissing = false)
@@ -1862,11 +1936,14 @@ internal sealed record TomSnapshotRecord(string Id, string RtfPath, string TextP
     }
 }
 
-internal sealed record TomOutlineItem(int Start, string Text)
+internal sealed record TomOutlineMatch(int Level, string Title, string Source);
+
+internal sealed record TomOutlineItem(int Start, int LineNumber, int Level, string Title, string Source)
 {
     public override string ToString()
     {
-        return Text;
+        var indent = new string(' ', Math.Max(0, Math.Min(Level, 6) - 1) * 2);
+        return $"{LineNumber}. {indent}{Title}";
     }
 }
 

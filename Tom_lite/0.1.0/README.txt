@@ -19,7 +19,7 @@ Tom.exe
 - 导入 TXT、Markdown、HTML、RTF、DOCX
 - 导出 TXT、Markdown、HTML、RTF、DOCX
 - 创建和恢复快照
-- 通过大纲快速跳转章节
+- 通过大纲快速跳转章节，大纲会按文档顺序提取 Markdown、编号、中文章/节和富文本标题
 - 使用 Codex 或 Claude 执行自由指令
 - 选中文字后，在选区内右键可直接执行扩写、美化、总结、需求
 - AI 运行中会显示加载状态，自由指令按钮暂时不可重复点击，输入框仍可编辑
